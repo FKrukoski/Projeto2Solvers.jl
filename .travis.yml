@@ -18,7 +18,7 @@ notifications:
 
 branches:
   only:
-    - master
+    - main
     - /^v\d+\.\d+(\.\d+)?(-\S*)?$/ # tags
 
 jobs:
