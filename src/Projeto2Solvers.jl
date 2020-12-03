@@ -8,5 +8,7 @@ using NLPModels
 using SolverTools
 
 include("uncsolver.jl")
+include("newtoncombusca.jl")
+include("l_bfgs_rcst.jl")
 
 end # module
