@@ -1,14 +1,6 @@
 export newtoncombusca
 
 """
-    newtoncombusca(nlp; options...)
-
-This function ...
-Template for an unconstrained solver using the first order conditions
-
-    ‖∇f(xₖ)‖ ≤ ϵₐ + ϵᵣ‖∇f(x₀)‖,
-
-where ϵₐ is an absolute tolerance and ϵᵣ is a relative tolerance.
 
 Options:
 - atol: absolute tolerance for the first order condition (default: 1e-6)
@@ -27,7 +19,7 @@ function newtoncombusca(
   atol::Real = 1e-6,
   rtol::Real = 1e-6,
   max_eval::Int = 1000,
-  max_iter::Int = 0,
+  max_iter::Int = 100,
   max_time::Float64 = 10.0
 )
 
@@ -39,6 +31,8 @@ function newtoncombusca(
 
   f(x) = obj(nlp, x)
   ∇f(x) = grad(nlp, x)
+  H(x) = Symmetric(hess(nlp, x), :L)
+
   #= Re: Hessian
   Hessians are expensive, so `hess(nlp, x)` only returns the lower triangle of the symmetric Hessian at x.
   You can use it as a symmetric matrix with
@@ -70,14 +64,20 @@ function newtoncombusca(
 
   fx = f(x)
   ∇fx = ∇f(x)
-
+ 
   ϵ = atol + rtol * norm(∇fx)
   t₀ = time()
 
   iter = 0
   Δt = time() - t₀
   solved = norm(∇fx) < ϵ # First order stationary
-  tired = neval_obj(nlp) ≥ max_eval > 0|| iter ≥ max_iter > 0 || Δt ≥ max_time > 0 # Excess time, iteration, evaluations
+  tired = neval_obj(nlp) ≥ max_eval > 0|| 
+          iter ≥ max_iter > 0 || Δt ≥ max_time > 0 # Excess time, iteration, evaluations
+  
+  α = 1.0
+  η = 1e-2
+  Β = 1.0e-3
+  #num_backtrack = 0
 
   # status must be one of a few options found in SolverTools.show_statuses()
   # A good default value is :unknown.
@@ -96,17 +96,52 @@ function newtoncombusca(
 
   # This template implements a simple steepest descent method without any hopes of working.
   # This is where most of your change will happen
-  α = 1.0
-  while !(solved || tired)
-    x -= α * ∇fx
-    α *= 0.99
-    fx = f(x)
-    ∇fx = ∇f(x)
 
+  while !(solved || tired)
+    h = H(x)
+
+    if minimum(diag(h)) > 0     
+        ρ = 0.0
+    else
+        ρ = -minimum(diag(h)) + Β
+    end       
+
+    k = 0  
+    while   issuccess(cholesky(h + ρ*I, check=false)) == false
+            ρ = max(2ρ, Β)
+            k = k+1
+            if k > 1000
+              error("Hessiana não choleskeia")
+            end
+    end    
+    
+    F = cholesky(h + ρ*I)
+    J = F.L  
+    y = - J \ ∇f(x)
+    M = J'
+    d = M \ y
+    
+    # Armijo
+    α = 1.0
+    while f(x + α * d) ≥ f(x) + η * α * dot(d, ∇f(x))
+        α = α / 2
+        if α < 1e-8
+          status = :small_step
+          break
+        end
+    end
+    if status != :unknown #small_step
+      break
+    end
+
+    x = x + α * d
+    fx = f(x)
+    ∇fx = ∇f(x)  
     iter += 1
     Δt = time() - t₀
     solved = norm(∇fx) < ϵ # First order stationary
-    tired = neval_obj(nlp) ≥ max_eval > 0|| iter ≥ max_iter > 0 || Δt ≥ max_time > 0 # Excess time, iteration, evaluations
+    tired = neval_obj(nlp) ≥ max_eval > 0|| 
+            iter ≥ max_iter > 0 || Δt ≥ max_time > 0 # Excess time, iteration, evaluations
 
     @info log_row(
       Any[iter, fx, norm(∇fx), neval_obj(nlp), Δt]
@@ -129,7 +164,7 @@ function newtoncombusca(
     status,
     nlp,
     solution=x,
-    objective=f(x),
+    objective=fx,
     dual_feas=norm(∇fx),
     elapsed_time=Δt,
     iter=iter

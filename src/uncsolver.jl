@@ -105,7 +105,8 @@ function uncsolver(
     iter += 1
     Δt = time() - t₀
     solved = norm(∇fx) < ϵ # First order stationary
-    tired = neval_obj(nlp) ≥ max_eval > 0|| iter ≥ max_iter > 0 || Δt ≥ max_time > 0 # Excess time, iteration, evaluations
+    tired = neval_obj(nlp) ≥ max_eval > 0|| 
+            iter ≥ max_iter > 0 || Δt ≥ max_time > 0 # Excess time, iteration, evaluations
 
     @info log_row(
       Any[iter, fx, norm(∇fx), neval_obj(nlp), Δt]
