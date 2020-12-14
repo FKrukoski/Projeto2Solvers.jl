@@ -4,18 +4,16 @@
     nlp = ADNLPModel(
       # x -> (x[1] - 1)^2 + (x[2] - 2)^2 / 4,
       # zeros(2)
-      x -> (3- x[1])^2 + 10 * (x[1] - x[2]^2)^2,
-    [-1.2; 1.0]
+      x -> (x[1] - 1.0)^2 + 100 *(x[2] - x[1]^2)^2,
+    [-0.1; 1.0]
     )
     # output = with_logger(NullLogger()) do
     #   uncsolver(nlp)
-    output = with_logger(NullLogger()) do
-        newtoncombusca(nlp)    
-    end
+    output = newtoncombusca(nlp)    
     print(output)
-    @test isapprox(output.solution, [3.0; 1.73], rtol=1e-2)
-    @test output.objective < 1e-4
-    @test output.dual_feas < 1e-4
+    @test isapprox(output.solution, [1.0; 1.0], rtol=1e-2)
+    @test output.objective < 1e-3
+    @test output.dual_feas < 1e-3
     @test output.status == :first_order
   
     # output = with_logger(NullLogger()) do

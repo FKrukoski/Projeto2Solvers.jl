@@ -1,0 +1,26 @@
+Generic Execution stats #newtoncombusca
+  status: first-order stationary
+  objective value: 2.975208724165002e-12
+  primal feasibility: 0.0
+  dual feasibility: 8.171433832392111e-6
+  solution: [2.999998315272407  1.7320502874534052]
+  iterations: 5
+  elapsed time: 3.498440980911255
+
+Generic Execution stats #newton
+  status: first-order stationary
+  objective value: 2.975208724165002e-12
+  primal feasibility: 0.0
+  dual feasibility: 8.171433832392111e-6
+  solution: [2.999998315272407  1.7320502874534052]
+  iterations: 5
+  elapsed time: 3.7566890716552734
+
+  Generic Execution stats #gradiente
+  status: first-order stationary
+  objective value: 2.975208724165002e-12
+  primal feasibility: 0.0
+  dual feasibility: 8.171433832392111e-6
+  solution: [2.999998315272407  1.7320502874534052]
+  iterations: 5
+  elapsed time: 2.675992965698242

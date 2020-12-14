@@ -1,4 +1,5 @@
 export newtoncombusca
+export tentacholesky
 
 """
 
@@ -19,7 +20,7 @@ function newtoncombusca(
   atol::Real = 1e-6,
   rtol::Real = 1e-6,
   max_eval::Int = 1000,
-  max_iter::Int = 100,
+  max_iter::Int = 0,
   max_time::Float64 = 10.0
 )
 
@@ -32,41 +33,13 @@ function newtoncombusca(
   f(x) = obj(nlp, x)
   ∇f(x) = grad(nlp, x)
   H(x) = Symmetric(hess(nlp, x), :L)
-
-  #= Re: Hessian
-  Hessians are expensive, so `hess(nlp, x)` only returns the lower triangle of the symmetric Hessian at x.
-  You can use it as a symmetric matrix with
-
-      H(x) = Symmetric(hess(nlp, x), :L)
-
-  However, most symmetric linear solvers only use the lower half.
-  Furthermore, for large problems with sparse Hessians, you can obtain the triplet list `(i, j, aᵢⱼ)` using
-
-      rows, cols = hess_structure(nlp)
-      vals = hess_coord(nlp, x)
-      # or
-      hess_coord!(nlp, x, vals)
-
-  Finally, if your method only uses matrix-vector products, you can use
-
-      Hv = hprod(nlp, x, v)
-      # or
-      hprod!(nlp, x, v, Hv)
-
-  Or potentially, a linear operator that automatically does that (read more on github.com/JuliaSmoothOptimizers/LinearOperators.jl).
-  In the example below, the Hessian is not created explicitly (unless the model itself doesn't support it):
-
-      H = hess_op(nlp, x)
-      Hv = H * v
-
-  Notice that you can't access elements of the Hessian in this case.
-  =#
-
   fx = f(x)
   ∇fx = ∇f(x)
  
   ϵ = atol + rtol * norm(∇fx)
   t₀ = time()
+
+  x⁺ = similar(x) #estava faltando isso!
 
   iter = 0
   Δt = time() - t₀
@@ -77,8 +50,7 @@ function newtoncombusca(
   α = 1.0
   η = 1e-2
   Β = 1.0e-3
-  #num_backtrack = 0
-
+  
   # status must be one of a few options found in SolverTools.show_statuses()
   # A good default value is :unknown.
   status = :unknown
@@ -94,37 +66,29 @@ function newtoncombusca(
     Any[iter, fx, norm(∇fx), neval_obj(nlp), Δt]
   )
 
-  # This template implements a simple steepest descent method without any hopes of working.
-  # This is where most of your change will happen
-
   while !(solved || tired)
     h = H(x)
-
-    if minimum(diag(h)) > 0     
-        ρ = 0.0
-    else
-        ρ = -minimum(diag(h)) + Β
-    end       
-
-    k = 0  
-    while   issuccess(cholesky(h + ρ*I, check=false)) == false
-            ρ = max(2ρ, Β)
-            k = k+1
-            if k > 1000
-              error("Hessiana não choleskeia")
-            end
-    end    
+    F, status = tentacholesky(h, Β)
+    @info(status)
     
-    F = cholesky(h + ρ*I)
+    if status != :unknown #small_step
+      break
+    end
+    
     J = F.L  
-    y = - J \ ∇f(x)
+    y = - J \ ∇fx
     M = J'
     d = M \ y
-    
+    slope = dot(d, ∇fx)
+
     # Armijo
     α = 1.0
-    while f(x + α * d) ≥ f(x) + η * α * dot(d, ∇f(x))
+    x⁺ = x + α * d
+    f⁺ = f(x⁺)
+    while f⁺ ≥ fx + η * α * slope
         α = α / 2
+        x⁺ = x + α * d
+        f⁺ = f(x⁺)
         if α < 1e-8
           status = :small_step
           break
@@ -133,13 +97,14 @@ function newtoncombusca(
     if status != :unknown #small_step
       break
     end
-
-    x = x + α * d
-    fx = f(x)
+    x .= x⁺
+    fx = f⁺
     ∇fx = ∇f(x)  
     iter += 1
-    Δt = time() - t₀
+
     solved = norm(∇fx) < ϵ # First order stationary
+
+    Δt = time() - t₀
     tired = neval_obj(nlp) ≥ max_eval > 0|| 
             iter ≥ max_iter > 0 || Δt ≥ max_time > 0 # Excess time, iteration, evaluations
 
@@ -170,3 +135,37 @@ function newtoncombusca(
     iter=iter
   )
 end
+
+function tentacholesky(h, Β)
+  F = copy(h)
+  #status=:infeasible
+  #@info(status)
+  if minimum(diag(h)) > 0     
+    τ = 0.0
+  else
+    τ = -minimum(diag(h)) + Β
+  end       
+
+  while  !issuccess(cholesky(h + τ*I, check=false))
+    try
+      F = cholesky(h+τ*I)
+      #status=:unknown
+      #@info(status, τ)
+    catch ex
+      if isa(ex, LinearAlgebra.PosDefException)
+          τ = max(2τ, Β)
+          h = h+τ*I
+          #status=:infeasible
+          #@info(status, τ)
+      else
+          @error("jegue")# Erro desconhecido
+          #status = :neg_pred
+          #@info(status, τ)
+      end
+    end
+  end
+  F = cholesky(h+τ*I)
+  #@info(status, τ)
+  return F
+end
+
