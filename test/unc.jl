@@ -29,8 +29,8 @@
   @testset "Failures" begin
     # This checks that your solver is failing accordingly
     nlp = ADNLPModel(
-      x -> (3- x[1])^2 + 10 * (x[1] - x[2]^2)^2,
-    [-1.2; 1.0]
+      x -> (x[1] - 1.0)^2 + 100 *(x[2] - x[1]^2)^2,
+    [-0.1; 1.0]
     )
     output = with_logger(NullLogger()) do
       newtoncombusca(nlp, max_eval = 1)

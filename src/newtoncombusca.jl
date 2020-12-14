@@ -68,9 +68,9 @@ function newtoncombusca(
 
   while !(solved || tired)
     h = H(x)
-    F, status = tentacholesky(h, Β)
-    @info(status)
-    
+
+    F = tentacholesky(h, Β)
+        
     if status != :unknown #small_step
       break
     end
@@ -138,34 +138,27 @@ end
 
 function tentacholesky(h, Β)
   F = copy(h)
-  #status=:infeasible
-  #@info(status)
+  fatorou=:inicio
   if minimum(diag(h)) > 0     
     τ = 0.0
   else
     τ = -minimum(diag(h)) + Β
-  end       
-
-  while  !issuccess(cholesky(h + τ*I, check=false))
-    try
-      F = cholesky(h+τ*I)
-      #status=:unknown
-      #@info(status, τ)
-    catch ex
-      if isa(ex, LinearAlgebra.PosDefException)
-          τ = max(2τ, Β)
-          h = h+τ*I
-          #status=:infeasible
-          #@info(status, τ)
-      else
-          @error("jegue")# Erro desconhecido
-          #status = :neg_pred
-          #@info(status, τ)
+  end  
+  k = 0
+  while fatorou!=:fatorou
+    F = cholesky(h, check = false)
+    if !issuccess(F)
+      τ = max(2τ, Β)
+      h = h+τ*I
+      k +=1
+      if k>100
+        @error("muitas iterações")
+          break
       end
+    else
+      fatorou =:fatorou
     end
   end
-  F = cholesky(h+τ*I)
-  #@info(status, τ)
   return F
 end
 
