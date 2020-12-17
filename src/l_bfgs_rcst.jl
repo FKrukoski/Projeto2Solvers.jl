@@ -163,7 +163,7 @@ Disclaimers for the developer:
     nlp::AbstractNLPModel;
     atol::Real = 1e-6,
     rtol::Real = 1e-6,
-    max_eval::Int = 1000,
+    max_eval::Int = 50000,
     max_iter::Int = 0,
     max_time::Float64 = 10.0
     )
@@ -188,7 +188,7 @@ Disclaimers for the developer:
     #convergence tolerance
     ϵ = atol + rtol * norm(∇fx)
     #parameters η e r
-    η = 1.0e-3 #∈ (0,1e-3)
+    η = 0.1 #∈ (0,1e-3)
     r = 0.5 #∈ (0,1)
     
     t₀ = time()
@@ -220,19 +220,19 @@ Disclaimers for the developer:
       #compute sₖ by solving the subproblem
       # (6.27) aqui vai entrar o Steihaug
       s = Steighaug(∇fx, B, Δ) 
-      # @info("x: $x")
-      # @info("s: $s")
-      # @info("x+s: $(x.+s)")
+      #  @info("x: $x")
+      #  @info("s: $s")
+      # # @info("x+s: $(x.+s)")
       # @info("y: $(∇f(x.+s)-∇fx)")
       y = ∇f(x.+s) - ∇fx
       ared = fx - f(x.+s)
       pred = -(dot(∇fx, s) + 1/2 * dot(s, B*s)) 
       
       ρ = ared/pred
-      # @info("ρ: $ρ")
+      @info("ρ: $ρ")
 
       if ρ > η
-        # @info("Aqui não entra! $ρ > $η?")
+        @info("ρ > η: $ρ > $η?")
         # @info("x: $x")
         # @info("s: $s")
         x = x + s
@@ -241,12 +241,25 @@ Disclaimers for the developer:
         # @info("x: $x")
       end
       if ρ > 0.75 && norm(s) > 0.8 * Δ
+        @info("Aumenta Δ: $Δ")
         Δ = 2*Δ
+        if Δ > 10e50
+          @error("Δ muito grande")
+          status =:user
+        end
       end
       if ρ < 0.1
+        @info("Reduz Δ: $Δ")
         Δ = 0.5*Δ
+        if Δ < 10e-50
+          @error("Δ muito pequeno")
+          status =:small_step
+        end
       end
       
+      if status != :unknown #small_step
+        break
+      end
       yBs = y .-B*s
       # @info("y: $y")
       # @info("B*s: $(B*s)")
@@ -255,7 +268,7 @@ Disclaimers for the developer:
       if abs(dot(s,yBs)) >= r*norm(s,2)*norm(yBs,2) #6.26
         # @info("aqui tem que ter mágica - LBFGS")
         B = B + (yBs*yBs')/dot(yBs,s)
-        # @info(B + (yBs*yBs')/dot(yBs,s))
+        @info("novo B: $(B + (yBs*yBs')/dot(yBs,s))")
       end
       
       iter+= 1
