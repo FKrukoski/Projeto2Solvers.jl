@@ -5,16 +5,16 @@
       # x -> (x[1] - 1)^2 + (x[2] - 2)^2 / 4,
       # zeros(2)
       x -> (x[1] - 1.0)^2 + 100 *(x[2] - x[1]^2)^2,
-    [-0.1; 1.0]
+    [-1.2; 1.0]
     )
     # output = with_logger(NullLogger()) do
     #   uncsolver(nlp)
-    output = newtoncombusca(nlp)    
+    output = bfgs_rc(nlp)    
     print(output)
-    @test isapprox(output.solution, [1.0; 1.0], rtol=1e-2)
-    @test output.objective < 1e-3
-    @test output.dual_feas < 1e-3
-    @test output.status == :first_order
+     @test isapprox(output.solution, [1.0; 1.0], rtol=1e-2)
+     @test output.objective < 1e-3
+     @test output.dual_feas < 1e-3
+     @test output.status == :first_order
   
     # output = with_logger(NullLogger()) do
     #   gradiente(nlp)    
@@ -33,15 +33,15 @@
     [-0.1; 1.0]
     )
     output = with_logger(NullLogger()) do
-      newtoncombusca(nlp, max_eval = 1)
+      bfgs_rc(nlp, max_eval = 1)
     end
     @test output.status == :max_eval
     output = with_logger(NullLogger()) do
-      newtoncombusca(nlp, max_iter = 1)
+      bfgs_rc(nlp, max_iter = 1)
     end
     @test output.status == :max_iter
     output = with_logger(NullLogger()) do
-      newtoncombusca(nlp, max_time = 1e-8)
+      bfgs_rc(nlp, max_time = 1e-8)
     end
     @test output.status == :max_time
   end

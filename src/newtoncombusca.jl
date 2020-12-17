@@ -2,6 +2,10 @@ export newtoncombusca
 export tentacholesky
 
 """
+newtoncombusca(nlp, options...)
+
+This package implements the idea of find the minimum τ > 0 such that 
+∇²f(xₖ)+τ I is positive definite.
 
 Options:
 - atol: absolute tolerance for the first order condition (default: 1e-6)
@@ -67,19 +71,15 @@ Disclaimers for the developer:
     )
     
     while !(solved || tired)
-      
+      h = H(x)
+      F, status = tentacholesky(h, Β, status)
+      @info(status)
       if status != :unknown #small_step
         break
       end
       
-      h = H(x)
-      F = tentacholesky(h, Β)
-      
-      # J = F.L  
-      # y = - J \ ∇fx
-      # M = J'
-      # d = M \ y
       d = -(F \ ∇fx)
+      
       slope = dot(d, ∇fx)
       
       # Armijo
@@ -91,7 +91,7 @@ Disclaimers for the developer:
         x⁺ = x + α * d
         f⁺ = f(x⁺)
         if α < 1e-8
-          status = :small_step
+          status =:small_step
           break
         end
       end
@@ -137,13 +137,14 @@ Disclaimers for the developer:
     )
   end
   
-  function tentacholesky(h, Β)
+  function tentacholesky(h, Β, status)
     F = copy(h)
     fatorou=:inicio
-    if minimum(diag(h)) > 0     
+    ρ = minimum(diag(h))       
+    if  ρ > 0     
       τ = 0.0
     else
-      τ = -minimum(diag(h)) + Β
+      τ = -ρ + Β
     end  
     k = 0
     while fatorou!=:fatorou
@@ -152,15 +153,15 @@ Disclaimers for the developer:
         τ = max(2τ, Β)
         h = h+τ*I
         k +=1
-        if k>100
-          @error("muitas iterações")
+        if k > 250
+          status=:user 
           break
         end
       else
         fatorou =:fatorou
       end
     end
-    return F
+    return F, status
   end
   
   
