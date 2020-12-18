@@ -1,3 +1,4 @@
+export l_bfgs_rcst
 export bfgs_bl
 export bfgs_rc
 export bfgsH
@@ -154,10 +155,10 @@ Disclaimers for the developer:
     return H
   end
   
-
-
-
-
+  
+  
+  
+  
   #REGIÃO DE CONFIANÇA
   function bfgs_rc(
     nlp::AbstractNLPModel;
@@ -176,20 +177,26 @@ Disclaimers for the developer:
     x = copy(nlp.meta.x0)
     f(x) = obj(nlp, x)
     ∇f(x) = grad(nlp, x)
-    
+
+    #coeficiente mágico de normalização - inventado, testando
+    Γ = log(norm(∇f(x)))
+
     # initial Hessian approximation 
     n = length(x)
-    B = Matrix(1.0I, n, n)
+    #B = hess(nlp, x) #roubando
+    # B = Matrix(1.0I, n, n)
+    B = Matrix(Γ*I, n, n)
     #trust region radius
-    Δ = 1.0
+    # Δ = 1.0
+    Δ = Γ
     
     fx = f(x)
     ∇fx = ∇f(x)
     #convergence tolerance
     ϵ = atol + rtol * norm(∇fx)
     #parameters η e r
-    η = 0.1 #∈ (0,1e-3)
-    r = 0.5 #∈ (0,1)
+    η = 0.01 #∈ (0,1e-3)
+    r = 0.001 #∈ (0,1)
     
     t₀ = time()
     
@@ -197,8 +204,8 @@ Disclaimers for the developer:
     Δt = time() - t₀
     solved = norm(∇fx) < ϵ # First order stationary
     tired = neval_obj(nlp) ≥ max_eval > 0 || 
-                      iter ≥ max_iter > 0 ||
-                        Δt ≥ max_time > 0 
+    iter ≥ max_iter > 0 ||
+    Δt ≥ max_time > 0 
     # Excess time, iteration, evaluations
     # status must be one of a few options found in SolverTools.show_statuses()
     # A good default value is :unknown.
@@ -230,8 +237,15 @@ Disclaimers for the developer:
       
       ρ = ared/pred
       @info("ρ: $ρ")
-
-      if ρ > η
+      
+      if ρ < η
+        @info("Reduz Δ: $Δ")
+        Δ = Δ/2
+        if Δ < 10e-50
+          @error("Δ muito pequeno")
+          status =:small_step
+        end
+      else 
         @info("ρ > η: $ρ > $η?")
         # @info("x: $x")
         # @info("s: $s")
@@ -239,21 +253,13 @@ Disclaimers for the developer:
         fx = f(x)
         ∇fx = ∇f(x)
         # @info("x: $x")
-      end
-      if ρ > 0.75 && norm(s) > 0.8 * Δ
-        @info("Aumenta Δ: $Δ")
-        Δ = 2*Δ
-        if Δ > 10e50
-          @error("Δ muito grande")
-          status =:user
-        end
-      end
-      if ρ < 0.1
-        @info("Reduz Δ: $Δ")
-        Δ = 0.5*Δ
-        if Δ < 10e-50
-          @error("Δ muito pequeno")
-          status =:small_step
+        if ρ > 0.75 && norm(s) > 0.8 * Δ
+          @info("Aumenta Δ: $Δ")
+          Δ = 2*Δ
+          if Δ > 10e50
+            @error("Δ muito grande")
+            status =:user
+          end
         end
       end
       
@@ -261,13 +267,11 @@ Disclaimers for the developer:
         break
       end
       yBs = y .-B*s
-      # @info("y: $y")
-      # @info("B*s: $(B*s)")
-      # @info(abs(dot(s,yBs)))
-      # @info(r*norm(s,2)*norm(yBs,2))
-      if abs(dot(s,yBs)) >= r*norm(s,2)*norm(yBs,2) #6.26
+      if abs(dot(s,yBs)) ≥ r*norm(s,2)*norm(yBs,2) 
+        #6.26 - evita atualizações se o denominador é pequeno
         # @info("aqui tem que ter mágica - LBFGS")
         B = B + (yBs*yBs')/dot(yBs,s)
+
         @info("novo B: $(B + (yBs*yBs')/dot(yBs,s))")
       end
       
@@ -275,7 +279,8 @@ Disclaimers for the developer:
       
       Δt = time() - t₀
       solved = norm(∇fx) < ϵ # First order stationary
-      tired = neval_obj(nlp) ≥ max_eval > 0|| iter ≥ max_iter > 0 || Δt ≥ max_time > 0 # Excess time, iteration, evaluations
+      tired = neval_obj(nlp) ≥ max_eval > 0|| iter ≥ max_iter > 0 || 
+                          Δt ≥ max_time > 0 # Excess time, iteration, evaluations
       
       @info log_row(
       Any[iter, fx, norm(∇fx), neval_obj(nlp), Δt]
@@ -364,4 +369,170 @@ Disclaimers for the developer:
       m2 = min(t1,t2) 
       return m1, m2
     end                 
+  end
+
+  # L-BGFS-RC-Steighaug
+  function l_bfgs_rcst(
+    nlp::AbstractNLPModel;
+    atol::Real = 1e-6,
+    rtol::Real = 1e-6,
+    max_eval::Int = 1000,
+    max_iter::Int = 0,
+    max_time::Float64 = 10.0
+    )
+    
+    if !unconstrained(nlp)
+      error("Problem is not unconstrained")
+    end
+    
+    #Given the starting point
+    x = copy(nlp.meta.x0)
+    f(x) = obj(nlp, x)
+    ∇f(x) = grad(nlp, x)
+
+    #coeficiente mágico de normalização - inventado, testando
+    Γ = log(norm(∇f(x)))
+
+    # initial Hessian approximation 
+    n = length(x)
+    #B = hess(nlp, x) #roubando
+    # B = Matrix(1.0I, n, n)
+    B = Matrix(Γ*I, n, n)
+    #trust region radius
+    # Δ = 1.0
+    Δ = Γ
+    #Criar matrizes para armazenar s e y
+    if n <= 4
+      m_vetores = n
+    else
+      m_vetores = round(Int(sqrt(n)))
+    end
+
+    S = zeros(n, m_vetores)
+    Y = zeros(n, m_vetores)
+
+
+
+    fx = f(x)
+    ∇fx = ∇f(x)
+    #convergence tolerance
+    ϵ = atol + rtol * norm(∇fx)
+    #parameters η e r
+    η = 0.01 #∈ (0,1e-3)
+    r = 0.001 #∈ (0,1)
+    
+    t₀ = time()
+    
+    iter = 0
+    Δt = time() - t₀
+    solved = norm(∇fx) < ϵ # First order stationary
+    tired = neval_obj(nlp) ≥ max_eval > 0 || 
+    iter ≥ max_iter > 0 ||
+    Δt ≥ max_time > 0 
+    # Excess time, iteration, evaluations
+    # status must be one of a few options found in SolverTools.show_statuses()
+    # A good default value is :unknown.
+    status = :unknown
+    # log_header is up for some rewrite in the future. For now, it simply prints the column names with some spacing
+    @info log_header(
+    [:iter, :fx, :ngx, :nf, :Δt],
+    [Int, Float64, Float64, Int, Float64],
+    hdr_override=Dict(:fx => "f(x)", :ngx => "‖∇f(x)‖", :nf => "#f")
+    )
+    # log_row uses the type information of each value, thus we use `Any` here.
+    @info log_row(
+    Any[iter, fx, norm(∇fx), neval_obj(nlp), Δt]
+    )
+    
+    # Aqui começa o show
+    
+    while !(solved || tired)
+      #compute sₖ by solving the subproblem
+      # (6.27) aqui vai entrar o Steihaug
+      s = Steighaug(∇fx, B, Δ) 
+      #  @info("x: $x")
+      #  @info("s: $s")
+      # # @info("x+s: $(x.+s)")
+      # @info("y: $(∇f(x.+s)-∇fx)")
+      y = ∇f(x.+s) - ∇fx
+      ared = fx - f(x.+s)
+      pred = -(dot(∇fx, s) + 1/2 * dot(s, B*s)) 
+      
+      ρ = ared/pred
+      if ρ < η
+        Δ = Δ/2
+        if Δ < 10e-50
+          status =:small_step
+        end
+      else 
+        x = x + s
+        fx = f(x)
+        ∇fx = ∇f(x)
+        if ρ > 0.75 && norm(s) > 0.8 * Δ
+          Δ = 2*Δ
+          if Δ > 10e50
+            status =:user
+          end
+        end
+      end
+      
+      if status != :unknown #small_step
+        break
+      end
+      if iter < m_vetores
+        yBs = y .-B*s
+        if abs(dot(s,yBs)) ≥ r*norm(s,2)*norm(yBs,2) 
+          #6.26 - evita atualizações se o denominador é pequeno
+          B = B + (yBs*yBs')/dot(yBs,s)
+        end
+        S[:,iter+1] = s
+        Y[:,iter+1] = y
+      else
+        yBs = y .-B*s
+        if abs(dot(s,yBs)) ≥ r*norm(s,2)*norm(yBs,2) 
+          #6.26 - evita atualizações se o denominador é pequeno
+          # @info("aqui tem que ter mágica - LBFGS")
+          B = B + (yBs*yBs')/dot(yBs,s)
+        end
+        cparmz = mod(iter, m_vetores) + 1
+        S[:,cparmz] = s
+        Y[:,cparmz] = y
+      end
+
+      
+      
+
+      iter+= 1
+      
+      Δt = time() - t₀
+      solved = norm(∇fx) < ϵ # First order stationary
+      tired = neval_obj(nlp) ≥ max_eval > 0|| iter ≥ max_iter > 0 || 
+                          Δt ≥ max_time > 0 # Excess time, iteration, evaluations
+      
+      @info log_row(
+      Any[iter, fx, norm(∇fx), neval_obj(nlp), Δt]
+      )
+    end
+    
+    if solved
+      status = :first_order
+    elseif tired
+      if neval_obj(nlp) ≥ max_eval > 0
+        status = :max_eval
+      elseif iter ≥ max_iter > 0
+        status = :max_iter
+      elseif Δt ≥ max_time > 0
+        status = :max_time
+      end
+    end
+    
+    return GenericExecutionStats(
+    status,
+    nlp,
+    solution=x,
+    objective=f(x),
+    dual_feas=norm(∇fx),
+    elapsed_time=Δt,
+    iter=iter
+    )
   end
