@@ -7,9 +7,9 @@
     #   x -> (x[1] - 1.0)^2 + 100 *(x[2] - x[1]^2)^2,
     # [-1.2; 1.0]
     # )
-    #nlp = CUTEstModel("ROSENBR")
-    nlp = CUTEstModel("OSBORNEA")
-    #nlp = CUTEstModel("DMN37142LS")
+    nlp = CUTEstModel("ROSENBR")
+    # nlp = CUTEstModel("OSBORNEA")
+    # nlp = CUTEstModel("DMN37142LS")
     
     # output = with_logger(NullLogger()) do
     #   uncsolver(nlp)
