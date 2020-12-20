@@ -156,9 +156,6 @@ Disclaimers for the developer:
   end
   
   
-  
-  
-  
   #REGIÃO DE CONFIANÇA
   function bfgs_rc(
     nlp::AbstractNLPModel;
@@ -178,20 +175,16 @@ Disclaimers for the developer:
     f(x) = obj(nlp, x)
     ∇f(x) = grad(nlp, x)
 
-    #coeficiente mágico de normalização - inventado, testando
-    Γ = log(norm(∇f(x)))
-
     # initial Hessian approximation 
     n = length(x)
-    #B = hess(nlp, x) #roubando
-    # B = Matrix(1.0I, n, n)
-    B = Matrix(Γ*I, n, n)
+    
     #trust region radius
-    # Δ = 1.0
-    Δ = Γ
+    Δ = 1.0
+
     
     fx = f(x)
     ∇fx = ∇f(x)
+
     #convergence tolerance
     ϵ = atol + rtol * norm(∇fx)
     #parameters η e r
@@ -222,39 +215,35 @@ Disclaimers for the developer:
     )
     
     # Aqui começa o show
+    #determinar o primero B
+    # B⁰ₖ = δₖI, wher δₖ = dot(y,y)/dot(s,y) Nocedal pg178 (eq.7.20)
+    B = Matrix(1.0I, n, n)
+    s = Steighaug(∇fx, B, Δ) 
+    y = ∇f(x.+s) - ∇fx
+    γ = dot(y,y)/dot(s,y)
+    if γ >= 1.0
+      B = Matrix(γ*I, n, n)
+    end
     
     while !(solved || tired)
       #compute sₖ by solving the subproblem
       # (6.27) aqui vai entrar o Steihaug
       s = Steighaug(∇fx, B, Δ) 
-      #  @info("x: $x")
-      #  @info("s: $s")
-      # # @info("x+s: $(x.+s)")
-      # @info("y: $(∇f(x.+s)-∇fx)")
       y = ∇f(x.+s) - ∇fx
       ared = fx - f(x.+s)
       pred = -(dot(∇fx, s) + 1/2 * dot(s, B*s)) 
-      
       ρ = ared/pred
-      @info("ρ: $ρ")
-      
       if ρ < η
-        @info("Reduz Δ: $Δ")
         Δ = Δ/2
         if Δ < 10e-50
           @error("Δ muito pequeno")
           status =:small_step
         end
       else 
-        @info("ρ > η: $ρ > $η?")
-        # @info("x: $x")
-        # @info("s: $s")
         x = x + s
         fx = f(x)
         ∇fx = ∇f(x)
-        # @info("x: $x")
         if ρ > 0.75 && norm(s) > 0.8 * Δ
-          @info("Aumenta Δ: $Δ")
           Δ = 2*Δ
           if Δ > 10e50
             @error("Δ muito grande")
@@ -267,12 +256,16 @@ Disclaimers for the developer:
         break
       end
       yBs = y .-B*s
-      if abs(dot(s,yBs)) ≥ r*norm(s,2)*norm(yBs,2) 
+      syBs = dot(s, yBs)
+      if abs(syBs) > r*norm(s,2)*norm(yBs,2) #era maior ou igual, deixei maior
+        # em alguns casos, y - B*s pode ser zero... e nesse caso a atualização 
+        #de B será uma divisão por zero.
+        
+        #why?!?!
         #6.26 - evita atualizações se o denominador é pequeno
-        # @info("aqui tem que ter mágica - LBFGS")
-        B = B + (yBs*yBs')/dot(yBs,s)
-
-        @info("novo B: $(B + (yBs*yBs')/dot(yBs,s))")
+        #Simmetric-rank 1 method: prevent breakdown; better approximations 
+        # to the true Hessian matrix;
+        B = B + (yBs*yBs')/syBs
       end
       
       iter+= 1
@@ -324,35 +317,50 @@ Disclaimers for the developer:
     end
     # enquanto estiver dentro da região de confiança
     k=0
-    while normr > ϵ || k < 5
+    while normr > ϵ || k < m # CG vai em no máximo m-variáveis direções
       dotdBd = dot(d,B*d)
+      @info("dotdBd: $dotdBd")
       if dotdBd ≤ 0 
-        # encontrar τ que minimiza o modelo (4.5) e satisfaz ||pk|| = Δk
+        # para o método se a direção dⱼ é direção de curvatura não positiva 
+        # encontrar τ >=0 tal que pk e satisfaz ||pk|| = Δk
+        # ou seja, a interseção da direção com a região de confiança
         m1, m2 = BhaskaraTop(z, d, Δ)
-        # @info("m2 :$m2")
         return z + m2*d
       end
       
       dotrr = dot(r,r)
       α = dotrr/dotdBd
+      @info("α: $α")
       zx = z + α*d
       if norm(zx) ≥ Δ
+        #para se zⱼ₊₁ viola os limites da região de confiança    
         # encontrar τ >=0 tal que pk e satisfaz ||pk|| = Δk
+        # ou seja, a interseção da direção com a região de confiança
         m1, m2 = BhaskaraTop(z, d, Δ)    
-        # @info("m1 :$m1")
         return z + m1*d
       end
       
-      rx = r + α*B*d
+      rx = r + α*B*d #Conjugate Gradient
+      #se α = 0 => rx = r , β = 1
+      if norm(α) < ϵ^2 
+        #@error("α menor que zero") 
+        return zeros(m)
+      end
       if norm(rx) < ϵ
         return zx
       end
       β = dot(rx,rx)/dotrr
       d = -rx+ β*d
       r = rx 
+      normr = norm(r)
       z = zx 
-      k+=1   
+      k+=1
     end  
+    if k >= m
+      #@error ("não encontrou a borda, direção multipla da própria direção")
+      return zeros(m)
+    end
+
   end
   
   function BhaskaraTop(z, d, Δ)
@@ -371,12 +379,15 @@ Disclaimers for the developer:
     end                 
   end
 
-  # L-BGFS-RC-Steighaug
+
+
+  #E... FINALMENTE
+  # L-BGFS-RC-Steighaug-Toint
   function l_bfgs_rcst(
     nlp::AbstractNLPModel;
     atol::Real = 1e-6,
     rtol::Real = 1e-6,
-    max_eval::Int = 1000,
+    max_eval::Int = 50000,
     max_iter::Int = 0,
     max_time::Float64 = 10.0
     )
@@ -390,31 +401,34 @@ Disclaimers for the developer:
     f(x) = obj(nlp, x)
     ∇f(x) = grad(nlp, x)
 
-    #coeficiente mágico de normalização - inventado, testando
-    Γ = log(norm(∇f(x)))
+    fx = f(x)
+    ∇fx = ∇f(x)
 
+    #trust region radius
+    Δ = 1.0
+    
     # initial Hessian approximation 
     n = length(x)
     #B = hess(nlp, x) #roubando
     # B = Matrix(1.0I, n, n)
-    B = Matrix(Γ*I, n, n)
-    #trust region radius
-    # Δ = 1.0
-    Δ = Γ
+    B = Matrix(1.0*I, n, n)
+    s = Steighaug(∇fx, B, Δ) 
+    y = ∇f(x.+s) - ∇fx
+    γ = dot(y,y)/dot(s,y) #ver Nocedal p. 178
+    B = Matrix(γ*I, n, n)
+
+    
+    
     #Criar matrizes para armazenar s e y
-    if n <= 4
+    if n <= 5
       m_vetores = n
     else
-      m_vetores = round(Int(sqrt(n)))
+      m_vetores = round(Int, sqrt(n))
     end
 
     S = zeros(n, m_vetores)
     Y = zeros(n, m_vetores)
-
-
-
-    fx = f(x)
-    ∇fx = ∇f(x)
+  
     #convergence tolerance
     ϵ = atol + rtol * norm(∇fx)
     #parameters η e r
@@ -450,14 +464,14 @@ Disclaimers for the developer:
       #compute sₖ by solving the subproblem
       # (6.27) aqui vai entrar o Steihaug
       s = Steighaug(∇fx, B, Δ) 
-      #  @info("x: $x")
-      #  @info("s: $s")
-      # # @info("x+s: $(x.+s)")
-      # @info("y: $(∇f(x.+s)-∇fx)")
+      @info("∇f(x.+s): $(∇f(x.+s)) - ∇fx : $∇fx")
       y = ∇f(x.+s) - ∇fx
       ared = fx - f(x.+s)
       pred = -(dot(∇fx, s) + 1/2 * dot(s, B*s)) 
-      
+      @info("s: $s")
+      @info("y: $y")
+      @info("ared: $ared, pred: $pred")
+    
       ρ = ared/pred
       if ρ < η
         Δ = Δ/2
@@ -466,11 +480,14 @@ Disclaimers for the developer:
         end
       else 
         x = x + s
+        @info("x: $x")
+        @info("ρ: $ρ")
+        @info("Δ: $Δ")
         fx = f(x)
         ∇fx = ∇f(x)
         if ρ > 0.75 && norm(s) > 0.8 * Δ
           Δ = 2*Δ
-          if Δ > 10e50
+          if Δ > 10e50 #raio que o parta de grande
             status =:user
           end
         end
@@ -481,26 +498,28 @@ Disclaimers for the developer:
       end
       if iter < m_vetores
         yBs = y .-B*s
-        if abs(dot(s,yBs)) ≥ r*norm(s,2)*norm(yBs,2) 
+        if abs(dot(s,yBs)) > r*norm(s,2)*norm(yBs,2) 
           #6.26 - evita atualizações se o denominador é pequeno
           B = B + (yBs*yBs')/dot(yBs,s)
+          @info("B: $B")
         end
         S[:,iter+1] = s
         Y[:,iter+1] = y
       else
         yBs = y .-B*s
-        if abs(dot(s,yBs)) ≥ r*norm(s,2)*norm(yBs,2) 
+        if abs(dot(s,yBs)) > r*norm(s,2)*norm(yBs,2) #correto, ver anterior
           #6.26 - evita atualizações se o denominador é pequeno
-          # @info("aqui tem que ter mágica - LBFGS")
-          B = B + (yBs*yBs')/dot(yBs,s)
+          #aqui tem que ter mágica - LBFGS
+          δₖ = dot(y,y)/dot(s, y)
+          B = LimitedMemory(δₖ, S, Y, iter, n, m_vetores)
+          @info("B: $B")
         end
-        cparmz = mod(iter, m_vetores) + 1
-        S[:,cparmz] = s
-        Y[:,cparmz] = y
+        
+        #cpatu = coluna para atualizar
+        cpatu = mod(iter, m_vetores) + 1 
+        S[:,cpatu] = s
+        Y[:,cpatu] = y
       end
-
-      
-      
 
       iter+= 1
       
@@ -535,4 +554,29 @@ Disclaimers for the developer:
     elapsed_time=Δt,
     iter=iter
     )
+  end
+
+  function LimitedMemory(δₖ, S, Y, iter, n, m)
+    Dₖ = zeros(m,m)
+    Lₖ = zeros(m,m)
+    
+    B1 = δₖ.*I(n)
+    inicio = mod(iter, m) + 1
+    Sₖ= [S[:, inicio:m] S[:, 1:inicio-1]]
+    Yₖ = [Y[:, inicio:m] Y[:, 1:inicio-1]]
+    δS = δₖ.*Sₖ
+    B2 = [δS Yₖ]
+    for i=1:m, j=1:m
+      if i>j
+        Lₖ[i,j] = dot(S[:,i], Y[:,j]) 
+      end
+      if i==j
+        Dₖ[i,j] = dot(S[:,i], Y[:,j])
+      end
+    end
+    B3 = inv([δS'*Sₖ Lₖ; Lₖ' -Dₖ])
+    B4 = [δS';Yₖ']
+
+    return B1 - B2*B3*B4 
+    
   end

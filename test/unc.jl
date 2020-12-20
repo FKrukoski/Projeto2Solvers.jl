@@ -7,29 +7,30 @@
     #   x -> (x[1] - 1.0)^2 + 100 *(x[2] - x[1]^2)^2,
     # [-1.2; 1.0]
     # )
-    nlp = CUTEstModel("BOXBODLS")
+    #nlp = CUTEstModel("ROSENBR")
+    nlp = CUTEstModel("OSBORNEA")
+    #nlp = CUTEstModel("DMN37142LS")
+    
     # output = with_logger(NullLogger()) do
     #   uncsolver(nlp)
+
     # output = bfgs_bl(nlp)    
     # println("bfgs-bl")
     # print(output)
     
-    output = bfgs_rc(nlp)    
-    println("bfgs-rc")
+    # output = bfgs_rc(nlp)    
+    # println("bfgs-rc")
+    # print(output)
+    
+    output = l_bfgs_rcst(nlp)    
+    println("l-bfgs-rc")
     print(output)
 
     # output = newtoncombusca(nlp)    
     # println("newtoncombusca")
     # print(output)
 
-    # output = newton(nlp)    
-    # println("newton")
-    # print(output)
-
-    # output = gradiente(nlp)    
-    # println("gradiente")
-    # print(output)
-    # #  @test isapprox(output.solution, [1.0; 1.0], rtol=1e-2)
+    #  @test isapprox(output.solution, [1.0; 1.0], rtol=1e-2)
     #  @test output.objective < 1e-3
     #  @test output.dual_feas < 1e-3
     #  @test output.status == :first_order

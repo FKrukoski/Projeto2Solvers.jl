@@ -23,7 +23,7 @@ Disclaimers for the developer:
     nlp::AbstractNLPModel;
     atol::Real = 1e-6,
     rtol::Real = 1e-6,
-    max_eval::Int = 1000,
+    max_eval::Int = 10000,
     max_iter::Int = 0,
     max_time::Float64 = 10.0
     )
@@ -73,7 +73,6 @@ Disclaimers for the developer:
     while !(solved || tired)
       h = H(x)
       F, status = tentacholesky(h, Β, status)
-      @info(status)
       if status != :unknown #small_step
         break
       end
