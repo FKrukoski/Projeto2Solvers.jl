@@ -111,7 +111,7 @@ Disclaimers for the developer:
     nlp::AbstractNLPModel;
     atol::Real = 1e-6,
     rtol::Real = 1e-6,
-    max_eval::Int = 50000,
+    max_eval::Int = 1000,
     max_iter::Int = 0,
     max_time::Float64 = 10.0
     )
