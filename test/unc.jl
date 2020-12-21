@@ -22,13 +22,13 @@
     # println("bfgs-rc")
     # print(output)
     
-    output = l_bfgs_rcst(nlp)    
-    println("l-bfgs-rc")
-    print(output)
-
-    # output = newtoncombusca(nlp)    
-    # println("newtoncombusca")
+    # output = l_bfgs_rcst(nlp)    
+    # println("l-bfgs-rc")
     # print(output)
+
+    output = newtoncombusca(nlp)    
+    println("newtoncombusca")
+    print(output)
 
     #  @test isapprox(output.solution, [1.0; 1.0], rtol=1e-2)
     #  @test output.objective < 1e-3

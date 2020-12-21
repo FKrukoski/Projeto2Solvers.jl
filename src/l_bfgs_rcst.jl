@@ -305,10 +305,11 @@ Disclaimers for the developer:
         Dₖ[i,j] = dot(S[:,i], Y[:,j])
       end
     end
-    B3 = inv([δS'*Sₖ Lₖ; Lₖ' -Dₖ])
+    # B3 = inv([δS'*Sₖ Lₖ; Lₖ' -Dₖ])
+
     B4 = [δS';Yₖ']
 
-    return B1 - B2*B3*B4 
+    return B1 - B2*(([δS'*Sₖ Lₖ; Lₖ' -Dₖ])\B4) 
     
   end
 
