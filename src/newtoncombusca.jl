@@ -55,8 +55,6 @@ Disclaimers for the developer:
     η = 1e-2
     Β = 1.0e-3
     
-    # status must be one of a few options found in SolverTools.show_statuses()
-    # A good default value is :unknown.
     status = :unknown
     
     # log_header is up for some rewrite in the future. For now, it simply prints the column names with some spacing
@@ -78,7 +76,6 @@ Disclaimers for the developer:
       end
       
       d = -(F \ ∇fx)
-      
       slope = dot(d, ∇fx)
       
       # Armijo

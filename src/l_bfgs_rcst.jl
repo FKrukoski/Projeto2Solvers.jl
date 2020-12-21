@@ -29,7 +29,7 @@ Disclaimers for the developer:
   
   function Steighaug(gx, B, Δ)  
     # ϵ = 1e-4
-    ϵ = min(0.5,(norm(gx))^0.5)*norm(gx)
+    ϵ = min(0.5,(norm(gx))^0.5)*norm(gx) # tolerância sugerida Algor 7.1 
     m = length(gx)
     zx = zeros(m)
     r = gx
@@ -41,13 +41,13 @@ Disclaimers for the developer:
     if normr < ϵ
       return z
     end
+
     # enquanto estiver dentro da região de confiança
     k=0
     while normr > ϵ || k < m # CG vai em no máximo m-variáveis direções
       dotdBd = dot(d,B*d)
-      # @info("dotdBd: $dotdBd")
       if dotdBd ≤ 0 
-        # para o método se a direção dⱼ é direção de curvatura não positiva 
+        # pára o método se a direção dⱼ é direção de curvatura não positiva 
         # encontrar τ >=0 tal que pk e satisfaz ||pk|| = Δk
         # ou seja, a interseção da direção com a região de confiança
         m1, m2 = BhaskaraTop(z, d, Δ)
@@ -56,7 +56,6 @@ Disclaimers for the developer:
       
       dotrr = dot(r,r)
       α = dotrr/dotdBd
-      # @info("α: $α")
       zx = z + α*d
       if norm(zx) ≥ Δ
         #para se zⱼ₊₁ viola os limites da região de confiança    
@@ -67,11 +66,7 @@ Disclaimers for the developer:
       end
       
       rx = r + α*B*d #Conjugate Gradient
-      #se α = 0 => rx = r , β = 1
-      # if norm(α) < ϵ^2 
-      #   #@error("α menor que zero") 
-      #   return zx
-      # end
+      #se α = 0 => rx = r , β = 1 (logo abaixo)
 
       if norm(rx) < ϵ
         return zx
@@ -133,15 +128,11 @@ Disclaimers for the developer:
     #trust region radius
     Δ = 1.0
     
-    
-    #B = hess(nlp, x) #roubando
-    # B = Matrix(1.0I, n, n)
     B = Matrix(1.0*I, n, n)
     s = Steighaug(∇fx, B, Δ) 
     y = ∇f(x.+s) - ∇fx
     γ = dot(y,y)/dot(s,y) #ver Nocedal p. 178
     B = Matrix(γ*I, n, n)
-    
     
     # Criar matrizes para armazenar s e y
     if n < 5
@@ -155,6 +146,7 @@ Disclaimers for the developer:
   
     #convergence tolerance
     ϵ = atol + rtol * norm(∇fx)
+
     #parameters η e r
     η = 0.01 #∈ (0,1e-3)
     r = 0.001 #∈ (0,1)
@@ -165,11 +157,9 @@ Disclaimers for the developer:
     Δt = time() - t₀
     solved = norm(∇fx) < ϵ # First order stationary
     tired = neval_obj(nlp) ≥ max_eval > 0 || 
-    iter ≥ max_iter > 0 ||
-    Δt ≥ max_time > 0 
-    # Excess time, iteration, evaluations
-    # status must be one of a few options found in SolverTools.show_statuses()
-    # A good default value is :unknown.
+                      iter ≥ max_iter > 0 ||
+                      Δt ≥ max_time > 0 
+    
     status = :unknown
     # log_header is up for some rewrite in the future. For now, it simply prints the column names with some spacing
     @info log_header(
@@ -186,18 +176,13 @@ Disclaimers for the developer:
     
     while !(solved || tired)
       #compute sₖ by solving the subproblem
-      # (6.27) aqui vai entrar o Steihaug
       s = Steighaug(∇fx, B, Δ) 
-      # @info("∇f(x.+s): $(∇f(x.+s)) - ∇fx : $∇fx")
       y = ∇f(x.+s) - ∇fx
       if norm(y) < 10e-18
         status=:user
       end
       ared = fx - f(x.+s)
       pred = -(dot(∇fx, s) + 1/2 * dot(s, B*s)) 
-      # @info("s: $s")
-      # @info("y: $y")
-      # @info("ared: $ared, pred: $pred")
     
       ρ = ared/pred
       if ρ < η
@@ -207,14 +192,11 @@ Disclaimers for the developer:
         end
       else 
         x = x + s
-        # @info("x: $x")
-        # @info("ρ: $ρ")
-        # @info("Δ: $Δ")
         fx = f(x)
         ∇fx = ∇f(x)
         if ρ > 0.75 && norm(s) > 0.8 * Δ
           Δ = 2*Δ
-          if Δ > 10e50 #raio que o parta de grande
+          if Δ > 10e50 #evita que o raio aumente muito
             status =:user
           end
         end
@@ -228,22 +210,18 @@ Disclaimers for the developer:
         if abs(dot(s,yBs)) > r*norm(s,2)*norm(yBs,2) 
           #6.26 - evita atualizações se o denominador é pequeno
           B = B + (yBs*yBs')/dot(yBs,s)
-          # @info("B: $B")
         end
         S[:,iter+1] = s
         Y[:,iter+1] = y
       else
         yBs = y .-B*s
-        if abs(dot(s,yBs)) > r*norm(s,2)*norm(yBs,2) #correto, ver anterior
+        if abs(dot(s,yBs)) > r*norm(s,2)*norm(yBs,2) #evita situações em que são ambas zero
           #6.26 - evita atualizações se o denominador é pequeno
           #aqui tem que ter mágica - LBFGS
           δₖ = dot(y,y)/dot(s, y)
           B = LimitedMemory(δₖ, S, Y, iter, n, m_vetores)
-          # B = Unrolling(B, S, Y, iter, n, m_vetores)
-          # @info("B: $B")
         end
         
-        #cpatu = coluna para atualizar
         cpatu = mod(iter, m_vetores) + 1 
         S[:,cpatu] = s
         Y[:,cpatu] = y
