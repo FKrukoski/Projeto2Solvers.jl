@@ -179,7 +179,7 @@ Disclaimers for the developer:
       s = Steighaug(∇fx, B, Δ) 
       y = ∇f(x.+s) - ∇fx
       if norm(y) < 10e-18
-        status=:user
+        status=:small_step
       end
       ared = fx - f(x.+s)
       pred = -(dot(∇fx, s) + 1/2 * dot(s, B*s)) 
@@ -188,7 +188,7 @@ Disclaimers for the developer:
       if ρ < η
         Δ = Δ/2
         if Δ < 10e-50
-          status =:small_step
+          status =:user
         end
       else 
         x = x + s
@@ -197,7 +197,7 @@ Disclaimers for the developer:
         if ρ > 0.75 && norm(s) > 0.8 * Δ
           Δ = 2*Δ
           if Δ > 10e50 #evita que o raio aumente muito
-            status =:user
+            status =:not_desc
           end
         end
       end
